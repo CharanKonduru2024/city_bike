@@ -9,6 +9,8 @@ import requests
 import streamlit as st
 from branca.colormap import LinearColormap
 from streamlit_folium import st_folium
+
+# Ensure the parent directory is in the Python path
 parent_dir = str(Path(__file__).parent.parent)
 sys.path.append(parent_dir)
 from src.config import DATA_DIR
@@ -20,6 +22,7 @@ if "map_created" not in st.session_state:
     st.session_state.map_created = False
 
 # ------------------ SHAPE FILE ------------------
+@st.cache_data(show_spinner=False)
 def load_citibike_shape_file(data_dir, url, log=True):
     data_dir = Path(data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -101,20 +104,32 @@ N_STEPS = 4
 # Step 1: Download shapefile
 with st.spinner("Downloading Citi Bike station shape file..."):
     shape_url = "https://data.jerseycitynj.gov/api/explore/v2.1/catalog/datasets/citi-bike-locations-phase-1-system-map-3/exports/shp?lang=en&timezone=America%2FNew_York"
-    geo_df = load_citibike_shape_file(DATA_DIR, shape_url)
-    st.sidebar.write("Shape file downloaded.")
+    try:
+        geo_df = load_citibike_shape_file(DATA_DIR, shape_url)
+        st.sidebar.success("Shape file downloaded.")
+    except Exception as e:
+        st.sidebar.error(f"Error loading shape file: {str(e)}")
+        st.stop()
     progress_bar.progress(1 / N_STEPS)
 
 # Step 2: Load features
 with st.spinner("Loading batch of features from feature store..."):
-    features = load_batch_of_features_from_store(current_date)
-    st.sidebar.write("Features loaded.")
+    try:
+        features = load_batch_of_features_from_store(current_date)
+        st.sidebar.success("Features loaded.")
+    except Exception as e:
+        st.sidebar.error(f"Error loading features: {str(e)}")
+        st.stop()
     progress_bar.progress(2 / N_STEPS)
 
 # Step 3: Fetch predictions
 with st.spinner("Fetching predictions from latest model..."):
-    predictions = fetch_next_hour_predictions()
-    st.sidebar.write("Predictions ready.")
+    try:
+        predictions = fetch_next_hour_predictions()
+        st.sidebar.success("Predictions ready.")
+    except Exception as e:
+        st.sidebar.error(f"Error fetching predictions: {str(e)}")
+        st.stop()
     progress_bar.progress(3 / N_STEPS)
 
 # Step 4: Plot map
@@ -139,7 +154,6 @@ st.dataframe(top10[["pickup_location_id", "predicted_demand"]])
 
 # ------------------ Dropdown + Plot ------------------
 selected_id = st.selectbox("Select Station ID", predictions["pickup_location_id"].unique())
-
 fig = plot_prediction(
     features=features[features["pickup_location_id"] == selected_id],
     prediction=predictions[predictions["pickup_location_id"] == selected_id],
